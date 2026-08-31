@@ -25,6 +25,12 @@ class PacienteBase(SQLModel):
 class Paciente(PacienteBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
 
+class CitaConPaciente(SQLModel):
+    id: int
+    fecha: date
+    hora: time
+    paciente: Paciente
+
 engine = create_engine("sqlite:///citas.db")
 
 SQLModel.metadata.create_all(engine)
@@ -41,20 +47,25 @@ def crear_cita(datos: CitaBase):
         session.refresh(cita)
     return cita
 
-@app.get("/citas")
+@app.get("/citas", response_model=list[CitaConPaciente])
 def listar_citas():
     with Session(engine) as session:
-        return session.exec(select(Cita)).all()
+        resultados = session.exec(select(Cita, Paciente).join(Paciente)).all() 
+        respuesta = []
+        for cita, paciente in resultados:
+            respuesta.append(CitaConPaciente(id=cita.id, fecha=cita.fecha, hora=cita.hora, paciente=paciente))
+        return respuesta
 
-@app.get("/citas/{cita_id}")
+@app.get("/citas/{cita_id}", response_model=CitaConPaciente)
 def cita_por_id(cita_id: int):
     with Session(engine) as session:
         cita = session.get(Cita, cita_id)
         if cita is None:
             raise HTTPException(status_code=404, detail="Cita no encontrada")
-        return cita
-
-
+        paciente = session.get(Paciente, cita.paciente_id)
+        respuesta = CitaConPaciente(id=cita.id, fecha=cita.fecha, hora=cita.hora, paciente=paciente)
+        return respuesta
+    
 
 @app.post("/pacientes", status_code=201)
 def crear_paciente(datos: PacienteBase):
