@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import Session, select
 
 from database import engine
-from models import Cita, CitaBase, CitaConPaciente, Paciente
+from models import Cita, CitaBase, CitaConPaciente, Paciente, ActualizarEstado
 
 router = APIRouter(tags=["citas"])
 
@@ -25,7 +25,7 @@ def listar_citas():
         resultados = session.exec(select(Cita, Paciente).join(Paciente)).all() 
         respuesta = []
         for cita, paciente in resultados:
-            respuesta.append(CitaConPaciente(id=cita.id, fecha=cita.fecha, hora=cita.hora, paciente=paciente))
+            respuesta.append(CitaConPaciente(id=cita.id, fecha=cita.fecha, hora=cita.hora, paciente=paciente, estado=cita.estado))
         return respuesta
 
 @router.get("/citas/{cita_id}", response_model=CitaConPaciente)
@@ -37,4 +37,17 @@ def cita_por_id(cita_id: int):
         paciente = session.get(Paciente, cita.paciente_id)
         respuesta = CitaConPaciente(id=cita.id, fecha=cita.fecha, hora=cita.hora, paciente=paciente)
         return respuesta
-    
+
+
+@router.patch("/citas/{cita_id}")
+def actualizar_estado(cita_id: int, datos: ActualizarEstado):
+    with Session(engine) as session:
+        cita = session.get(Cita, cita_id)
+        if cita is None:
+            raise HTTPException(status_code=404, detail="Cita no encontrada")
+        cita.estado = datos.estado
+        session.add(cita)
+        session.commit()
+        session.refresh(cita)
+        return cita
+

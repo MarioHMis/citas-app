@@ -14,8 +14,18 @@ class CitaBase(SQLModel):
     hora: time
     motivo: MotivoConsulta
 
+class EstadoCita(str, Enum):
+    pendiente = "pendiente"
+    confirmada = "confirmada"
+    reagendada = "reagendada"
+    cancelada = "cancelada"
+
+class ActualizarEstado(SQLModel):
+    estado: EstadoCita
+
 class Cita(CitaBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    estado: EstadoCita = Field(default=EstadoCita.pendiente)
 
 
 class PacienteBase(SQLModel):
@@ -31,3 +41,5 @@ class CitaConPaciente(SQLModel):
     fecha: date
     hora: time
     paciente: Paciente
+    estado: EstadoCita
+
