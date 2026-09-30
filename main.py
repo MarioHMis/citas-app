@@ -1,102 +1,17 @@
-from fastapi import FastAPI, HTTPException
-from sqlmodel import SQLModel, Field, create_engine, Session, select
-from datetime import date, time 
+from fastapi import FastAPI
+from sqlmodel import SQLModel
+
+import models
+from database import engine
+from routers import pacientes, citas
+
 app = FastAPI()
 
-from enum import Enum
-
-class MotivoConsulta(str, Enum):
-    ortodoncia = "ortodoncia"
-    limpieza = "limpieza"
-    dolor_facial = "dolor_facial"
-    dolor_articular = "dolor_articular"
+SQLModel.metadata.create_all(engine)
 
 @app.get("/")
 def inicio():
     return {"mensaje": "El consultorio esta en linea"}
 
-
-class CitaBase(SQLModel):
-    paciente_id: int = Field(foreign_key="paciente.id")
-    fecha: date
-    hora: time
-    motivo: MotivoConsulta
-
-class Cita(CitaBase, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-
-
-class PacienteBase(SQLModel):
-    nombre: str
-    telefono: str
-    edad: int
-
-class Paciente(PacienteBase, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-
-class CitaConPaciente(SQLModel):
-    id: int
-    fecha: date
-    hora: time
-    paciente: Paciente
-
-engine = create_engine("sqlite:///citas.db")
-
-SQLModel.metadata.create_all(engine)
-
-@app.post("/citas", status_code=201)
-def crear_cita(datos: CitaBase):
-    cita = Cita.model_validate(datos)
-    with Session(engine) as session:
-        paciente = session.get(Paciente, datos.paciente_id)
-        if paciente is None:
-            raise HTTPException(status_code=404, detail="Paciente no encontrado") 
-        session.add(cita)
-        session.commit()
-        session.refresh(cita)
-    return cita
-
-@app.get("/citas", response_model=list[CitaConPaciente])
-def listar_citas():
-    with Session(engine) as session:
-        resultados = session.exec(select(Cita, Paciente).join(Paciente)).all() 
-        respuesta = []
-        for cita, paciente in resultados:
-            respuesta.append(CitaConPaciente(id=cita.id, fecha=cita.fecha, hora=cita.hora, paciente=paciente))
-        return respuesta
-
-@app.get("/citas/{cita_id}", response_model=CitaConPaciente)
-def cita_por_id(cita_id: int):
-    with Session(engine) as session:
-        cita = session.get(Cita, cita_id)
-        if cita is None:
-            raise HTTPException(status_code=404, detail="Cita no encontrada")
-        paciente = session.get(Paciente, cita.paciente_id)
-        respuesta = CitaConPaciente(id=cita.id, fecha=cita.fecha, hora=cita.hora, paciente=paciente)
-        return respuesta
-    
-
-@app.post("/pacientes", status_code=201)
-def crear_paciente(datos: PacienteBase):
-    paciente = Paciente.model_validate(datos)
-    with Session(engine) as session:
-        session.add(paciente)
-        session.commit()
-        session.refresh(paciente)
-        return paciente
-
-@app.get("/pacientes")
-def listar_pacientes():
-    with Session(engine) as session:
-        return session.exec(select(Paciente)).all()
-
-
-@app.get("/pacientes/{paciente_id}")
-def paciente_por_id(paciente_id: int):
-    with Session(engine) as session:
-        paciente = session.get(Paciente, paciente_id)
-        if paciente is None:
-            raise HTTPException(status_code=404, detail="Paciente no encontrado")
-        return paciente
-            
-    
+app.include_router(pacientes.router)
+app.include_router(citas.router)
